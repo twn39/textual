@@ -150,9 +150,14 @@
       return nil
     }
 
+    /// Remaps a selection from `other` into this collection.
+    ///
+    /// Streaming updates often grow the layout list (new paragraphs/blocks) while earlier
+    /// layouts keep stable local character offsets. Positions are reconciled per-layout by
+    /// local character index; layout count need not match. Returns `nil` when either endpoint
+    /// cannot be mapped (for example, its layout index no longer exists).
     func reconcileRange(_ range: TextRange, from other: any TextLayoutCollection) -> TextRange? {
       guard
-        layouts.count == other.layouts.count,
         let start = reconcilePosition(range.start, from: other),
         let end = reconcilePosition(range.end, from: other)
       else {
@@ -304,8 +309,16 @@
       _ position: TextPosition,
       from other: any TextLayoutCollection
     ) -> TextPosition? {
-      self.position(
-        at: position.indexPath.layout,
+      let layoutIndex = position.indexPath.layout
+      guard
+        layouts.indices.contains(layoutIndex),
+        other.layouts.indices.contains(layoutIndex)
+      else {
+        return nil
+      }
+
+      return self.position(
+        at: layoutIndex,
         localCharacterIndex: other.localCharacterIndex(at: position)
       )
     }

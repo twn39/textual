@@ -8,8 +8,8 @@ extension StructuredText {
 
     public func makeBody(configuration: Configuration) -> some View {
       configuration.label
-        .textual.lineSpacing(.fontScaled(0.23))
-        .textual.blockSpacing(.fontScaled(top: 0.8))
+        .textual.lineSpacing(DefaultStyleMetrics.paragraphLineSpacing)
+        .textual.blockSpacing(DefaultStyleMetrics.paragraphBlockSpacing)
     }
   }
 }

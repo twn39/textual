@@ -77,6 +77,28 @@ struct SoftIncompleteMarkdownTests {
     let input = "Hello **"
     #expect(SoftIncompleteMarkdown.prepare(input) == input)
   }
+
+  @Test func growingStreamKeepsCompletedPrefixIntact() {
+    let mid = SoftIncompleteMarkdown.prepare(
+      """
+      # Title
+
+      Hello **world** and `co
+      """
+    )
+    let complete = SoftIncompleteMarkdown.prepare(
+      """
+      # Title
+
+      Hello **world** and `code`
+      """
+    )
+
+    #expect(mid.contains("Hello **world** and "))
+    #expect(mid.hasSuffix("`"))
+    #expect(complete.contains("Hello **world** and `code`"))
+    #expect(complete.hasPrefix("# Title"))
+  }
 }
 
 @MainActor
@@ -110,5 +132,53 @@ struct StreamingMarkupSchedulerTests {
     scheduler.flush()
 
     #expect(flushed == ["`code`"])
+  }
+}
+
+@MainActor
+struct StructuredTextStreamingModelTests {
+  private struct CountingParser: MarkupParser {
+    let count: LockedCounter
+    func attributedString(for input: String) throws -> AttributedString {
+      count.increment()
+      return AttributedString(input)
+    }
+  }
+
+  final class LockedCounter: @unchecked Sendable {
+    private var value = 0
+    private let lock = NSLock()
+    func increment() {
+      lock.lock()
+      value += 1
+      lock.unlock()
+    }
+    var current: Int {
+      lock.lock()
+      defer { lock.unlock() }
+      return value
+    }
+  }
+
+  @Test func skipsRedundantParseWhenPreparedMarkupUnchanged() {
+    let count = LockedCounter()
+    let model = StructuredText.Model()
+    let parser = CountingParser(count: count)
+    let policy = StreamingUpdates.coalesced(interval: .seconds(10))
+
+    model.update(markup: "**bold", parser: parser, policy: policy)
+    model.flush()
+    #expect(count.current == 1)
+    #expect(String(model.attributedString.characters) == "**bold**")
+
+    // Soft-prepare of the same incomplete string yields the same payload; skip re-parse.
+    model.update(markup: "**bold", parser: parser, policy: policy)
+    model.flush()
+    #expect(count.current == 1)
+
+    model.update(markup: "Hello", parser: parser, policy: policy)
+    model.flush()
+    #expect(count.current == 2)
+    #expect(String(model.attributedString.characters) == "Hello")
   }
 }

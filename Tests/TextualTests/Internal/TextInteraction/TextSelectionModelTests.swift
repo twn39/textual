@@ -1080,6 +1080,91 @@
       #expect(model.offset(from: model.startPosition, to: selected.end) == endOffset)
     }
 
+    @Test
+    func reconcileRangePreservesSelectionWhenLayoutsGrow() throws {
+      // Streaming often appends blocks: layout count grows while earlier fragments stay put.
+      let grown = try loadLayoutCollection(named: "two-paragraphs-bidi")
+      let prefix = CodableTextLayoutCollection(
+        _layouts: Array(grown._layouts.prefix(1)),
+        needsReconciliation: true
+      )
+      let range = TextRange(
+        start: TextPosition(
+          indexPath: .init(runSlice: 1, run: 2, line: 0, layout: 0),
+          affinity: .downstream
+        ),
+        end: TextPosition(
+          indexPath: .init(runSlice: 3, run: 3, line: 0, layout: 0),
+          affinity: .upstream
+        )
+      )
+      let startOffset = prefix.characterIndex(at: range.start)
+      let endOffset = prefix.characterIndex(at: range.end)
+
+      let reconciled = grown.reconcileRange(range, from: prefix)
+
+      #expect(reconciled != nil)
+      #expect(grown.characterIndex(at: reconciled!.start) == startOffset)
+      #expect(grown.characterIndex(at: reconciled!.end) == endOffset)
+    }
+
+    @Test
+    func setLayoutCollectionPreservesSelectionAcrossStreamingGrowth() throws {
+      let grown = try loadLayoutCollection(named: "two-paragraphs-bidi")
+      let prefix = CodableTextLayoutCollection(
+        _layouts: Array(grown._layouts.prefix(1)),
+        needsReconciliation: true
+      )
+      let model = TextSelectionModel(layoutCollection: prefix)
+      let range = TextRange(
+        start: TextPosition(
+          indexPath: .init(runSlice: 1, run: 2, line: 0, layout: 0),
+          affinity: .downstream
+        ),
+        end: TextPosition(
+          indexPath: .init(runSlice: 3, run: 3, line: 0, layout: 0),
+          affinity: .upstream
+        )
+      )
+      model.selectedRange = range
+      let startOffset = model.offset(from: model.startPosition, to: range.start)
+      let endOffset = model.offset(from: model.startPosition, to: range.end)
+
+      var next = grown
+      next.needsReconciliation = true
+      model.setLayoutCollection(next)
+
+      let selected = try #require(model.selectedRange)
+      #expect(model.offset(from: model.startPosition, to: selected.start) == startOffset)
+      #expect(model.offset(from: model.startPosition, to: selected.end) == endOffset)
+    }
+
+    @Test
+    func setLayoutCollectionClearsSelectionWhenLayoutRemoved() throws {
+      let full = try loadLayoutCollection(named: "two-paragraphs-bidi")
+      let model = TextSelectionModel(layoutCollection: full)
+      // Selection entirely in the second paragraph/layout.
+      let range = TextRange(
+        start: TextPosition(
+          indexPath: .init(runSlice: 0, run: 0, line: 0, layout: 1),
+          affinity: .downstream
+        ),
+        end: TextPosition(
+          indexPath: .init(runSlice: 0, run: 4, line: 1, layout: 1),
+          affinity: .upstream
+        )
+      )
+      model.selectedRange = range
+
+      var shrunk = CodableTextLayoutCollection(
+        _layouts: Array(full._layouts.prefix(1)),
+        needsReconciliation: true
+      )
+      model.setLayoutCollection(shrunk)
+
+      #expect(model.selectedRange == nil)
+    }
+
     #if os(iOS)
       @Test(.disabled())
       @MainActor

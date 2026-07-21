@@ -15,8 +15,8 @@ extension StructuredText {
     public func makeBody(configuration: Configuration) -> some View {
       configuration.label
         .frame(maxWidth: .infinity, alignment: .leading)
-        .textual.lineSpacing(.fontScaled(0.471))
-        .textual.padding(.fontScaled(0.941))
+        .textual.lineSpacing(DefaultStyleMetrics.blockQuoteLineSpacing)
+        .textual.padding(DefaultStyleMetrics.blockQuotePadding)
         .background {
           ZStack(alignment: .leading) {
             Rectangle()

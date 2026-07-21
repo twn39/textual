@@ -9,6 +9,19 @@
   // `Affinity` disambiguates positions that sit exactly on a boundary, like the end of a line or
   // the edge between two run slices. That extra bit of information makes range comparisons and
   // containment behave consistently when the same visual location can map to two adjacent indices.
+  //
+  // ## Invariants
+  //
+  // - `indexPath.layout` indexes a fragment in `TextLayoutCollection.layouts` (one SwiftUI
+  //   `Text` fragment / block). Nested lines/runs/slices are local to that layout.
+  // - `Affinity.downstream` is the leading edge of a slice (lower character bound);
+  //   `.upstream` is the trailing edge (upper bound). Equal index paths compare by affinity.
+  // - Character offsets used for text ops are derived from the layout’s attributed string,
+  //   not from visual geometry. Geometry may change without changing character identity.
+  // - Across layout rebuilds (including streaming flushes), selection reconciliation maps each
+  //   endpoint by `(layoutIndex, localCharacterIndex)`. Growing the layout list preserves
+  //   selections that still land in an existing layout; removing a layout clears endpoints
+  //   that pointed into it.
 
   struct TextPosition: Hashable, Comparable, CustomStringConvertible {
     enum Affinity: Comparable {

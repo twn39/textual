@@ -93,3 +93,16 @@ One subtlety is that SwiftUI can produce multiple line fragments with their own 
 strings (for example, when hard line breaks are present). Textual reconciles these into a single
 attributed string for selection and adjusts slice character ranges so index and offset-based
 operations stay consistent.
+
+### Selection reconciliation invariants
+
+When `Text.Layout` rebuilds (theme changes, width changes, or streaming markup flushes),
+`TextSelectionModel` remaps `selectedRange` through `TextLayoutCollection.reconcileRange`:
+
+- Each endpoint maps by `(layoutIndex, localCharacterIndex)` from the previous collection.
+- Layout count may grow (new blocks while streaming); selections that still land in an
+  existing layout keep their character offsets.
+- If an endpoint’s layout index no longer exists (layout removed/collapsed), reconciliation
+  returns `nil` and the selection clears.
+- Soft-incomplete Markdown prepare may append closers at the trailing edge; earlier layouts’
+  local offsets should remain stable across flushes when those blocks did not change.

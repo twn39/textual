@@ -353,14 +353,12 @@
 
   extension NSTextInteractionView: NSUserInterfaceValidations {
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+      let capabilities = TextSelectionCapabilities(model: model)
       switch item.action {
       case #selector(selectAll(_:)):
-        return model.hasText
+        return capabilities.canSelectAll
       case #selector(copy(_:)):
-        guard let selectedRange = model.selectedRange else {
-          return false
-        }
-        return !selectedRange.isCollapsed
+        return capabilities.canCopy
       case #selector(moveRight(_:)),
         #selector(moveLeft(_:)),
         #selector(moveUp(_:)),
@@ -377,7 +375,7 @@
         #selector(moveWordLeftAndModifySelection(_:)),
         #selector(moveParagraphBackwardAndModifySelection(_:)),
         #selector(moveParagraphForwardAndModifySelection(_:)):
-        return model.selectedRange != nil
+        return capabilities.canNavigate
       default:
         return true
       }

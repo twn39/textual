@@ -159,6 +159,9 @@ extension StructuredText {
 
     private var parser: (any MarkupParser)?
     private var scheduler: StreamingMarkupScheduler?
+    /// Last markup that produced `attributedString`, after soft-incomplete prepare.
+    /// Used to skip redundant full re-parses when coalesced flushes repeat the same string.
+    private var lastPreparedMarkup: String?
 
     func update(markup: String, parser: any MarkupParser, policy: StreamingUpdates) {
       self.parser = parser
@@ -178,6 +181,12 @@ extension StructuredText {
         guard let self, let parser = self.parser else {
           return
         }
+        // Streaming still re-parses the full string on each distinct flush; skip only when
+        // soft-prepare yields an identical payload (common under coalesce + explicit flush).
+        guard prepared != self.lastPreparedMarkup else {
+          return
+        }
+        self.lastPreparedMarkup = prepared
         self.attributedString = (try? parser.attributedString(for: prepared)) ?? .init()
       }
       scheduler = created
