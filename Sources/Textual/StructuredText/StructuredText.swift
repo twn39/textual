@@ -101,8 +101,23 @@ import SwiftUI
 ///
 /// When you need to parse something other than Markdown, use ``init(_:parser:)`` with a custom
 /// ``MarkupParser`` implementation.
+///
+/// ### Streaming updates
+///
+/// When markup arrives incrementally (for example, tokens from an AI completion stream), enable
+/// coalesced updates so ``StructuredText`` batches rapid changes and softens incomplete trailing
+/// Markdown before parsing:
+///
+/// ```swift
+/// StructuredText(markdown: accumulated)
+///   .textual.streamingUpdates(.coalesced)
+/// ```
+///
+/// Streaming updates are opt-in. The default remains immediate, unsmoothed parsing on every change.
 public struct StructuredText: View {
-  @State private var attributedString = AttributedString()
+  @Environment(\.streamingUpdates) private var streamingUpdates
+
+  @State private var model = Model()
 
   private let markup: String
   private let parser: any MarkupParser
@@ -116,21 +131,58 @@ public struct StructuredText: View {
   }
 
   public var body: some View {
-    WithAttachments(attributedString) {
+    WithAttachments(model.attributedString) {
       BlockContent(content: $0)
         .modifier(TextSelectionInteraction())
         .modifier(TextSelectionCoordination())
     }
     .coordinateSpace(.textContainer)
     .onChange(of: markup, initial: true) {
-      markupDidChange(markup)
+      model.update(markup: markup, parser: parser, policy: streamingUpdates)
+    }
+    .onChange(of: streamingUpdates) {
+      model.update(markup: markup, parser: parser, policy: streamingUpdates)
+    }
+    .onDisappear {
+      model.flush()
     }
     // Disable line limit to avoid per-fragment truncation
     .lineLimit(nil)
   }
+}
 
-  private func markupDidChange(_ markup: String) {
-    self.attributedString = (try? parser.attributedString(for: markup)) ?? .init()
+extension StructuredText {
+  @MainActor
+  @Observable
+  final class Model {
+    var attributedString = AttributedString()
+
+    private var parser: (any MarkupParser)?
+    private var scheduler: StreamingMarkupScheduler?
+
+    func update(markup: String, parser: any MarkupParser, policy: StreamingUpdates) {
+      self.parser = parser
+      markupScheduler().update(markup, policy: policy)
+    }
+
+    func flush() {
+      scheduler?.flush()
+    }
+
+    private func markupScheduler() -> StreamingMarkupScheduler {
+      if let scheduler {
+        return scheduler
+      }
+
+      let created = StreamingMarkupScheduler { [weak self] prepared in
+        guard let self, let parser = self.parser else {
+          return
+        }
+        self.attributedString = (try? parser.attributedString(for: prepared)) ?? .init()
+      }
+      scheduler = created
+      return created
+    }
   }
 }
 

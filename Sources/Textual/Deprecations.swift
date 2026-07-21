@@ -1,5 +1,8 @@
 import SwiftUI
 
+// Deprecated APIs are retained for source compatibility. Prefer the non-deprecated replacements
+// below; removals should wait for a major version bump.
+
 // MARK: - Deprecated after 0.2.1
 
 extension StructuredText {

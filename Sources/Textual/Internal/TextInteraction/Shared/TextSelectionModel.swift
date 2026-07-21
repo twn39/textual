@@ -157,6 +157,135 @@
       layoutCollection.characterRange(at: point)
     }
 
+    /// Moves from `position` in a layout direction by `offset` steps.
+    ///
+    /// - Returns: `nil` when `offset` is negative or the move would leave the document.
+    ///   A zero `offset` returns `position` unchanged.
+    func position(
+      from position: TextPosition,
+      in direction: TextLayoutNavigationDirection,
+      offset: Int
+    ) -> TextPosition? {
+      guard offset >= 0 else {
+        return nil
+      }
+      guard offset > 0 else {
+        return position
+      }
+
+      switch direction {
+      case .left:
+        return self.position(from: position, offset: -offset)
+      case .right:
+        return self.position(from: position, offset: offset)
+      case .up:
+        var current = position
+        for _ in 0..<offset {
+          guard let next = positionAbove(current, anchor: position), next != current else {
+            return current
+          }
+          current = next
+        }
+        return current
+      case .down:
+        var current = position
+        for _ in 0..<offset {
+          guard let next = positionBelow(current, anchor: position), next != current else {
+            return current
+          }
+          current = next
+        }
+        return current
+      }
+    }
+
+    /// Returns the farthest endpoint of `range` in the given layout direction, using caret geometry.
+    func farthestPosition(
+      within range: TextRange,
+      in direction: TextLayoutNavigationDirection
+    ) -> TextPosition {
+      if range.isCollapsed {
+        return range.start
+      }
+
+      let startRect = caretRect(for: range.start)
+      let endRect = caretRect(for: range.end)
+
+      switch direction {
+      case .left:
+        return startRect.midX <= endRect.midX ? range.start : range.end
+      case .right:
+        return startRect.midX >= endRect.midX ? range.start : range.end
+      case .up:
+        return startRect.midY <= endRect.midY ? range.start : range.end
+      case .down:
+        return startRect.midY >= endRect.midY ? range.start : range.end
+      }
+    }
+
+    /// Returns a one-unit range extending from `position` in `direction`, or `nil` if it cannot move.
+    func characterRange(
+      byExtending position: TextPosition,
+      in direction: TextLayoutNavigationDirection
+    ) -> TextRange? {
+      guard
+        let adjacent = self.position(from: position, in: direction, offset: 1),
+        adjacent != position
+      else {
+        return nil
+      }
+      return TextRange(from: position, to: adjacent)
+    }
+
+    /// Moves the caret in `direction`, or collapses a non-empty selection to its farthest endpoint
+    /// in that direction (matching AppKit arrow-key behavior without Shift).
+    ///
+    /// - Returns: `false` when there is no selection, or a collapsed caret cannot move further.
+    @discardableResult
+    func moveSelection(in direction: TextLayoutNavigationDirection) -> Bool {
+      guard let selectedRange else {
+        return false
+      }
+
+      if selectedRange.isCollapsed {
+        guard
+          let next = position(from: selectedRange.start, in: direction, offset: 1),
+          next != selectedRange.start
+        else {
+          return false
+        }
+        self.selectedRange = TextRange(start: next, end: next)
+        return true
+      }
+
+      let collapsed = farthestPosition(within: selectedRange, in: direction)
+      self.selectedRange = TextRange(start: collapsed, end: collapsed)
+      return true
+    }
+
+    /// Collapses the selection to `position` when non-empty, otherwise applies `transform` to the caret.
+    @discardableResult
+    func moveSelection(
+      collapsingTo collapsingPosition: (TextRange) -> TextPosition,
+      orTransform transform: (TextPosition) -> TextPosition?
+    ) -> Bool {
+      guard let selectedRange else {
+        return false
+      }
+
+      if !selectedRange.isCollapsed {
+        let collapsed = collapsingPosition(selectedRange)
+        self.selectedRange = TextRange(start: collapsed, end: collapsed)
+        return true
+      }
+
+      guard let next = transform(selectedRange.start), next != selectedRange.start else {
+        return false
+      }
+      self.selectedRange = TextRange(start: next, end: next)
+      return true
+    }
+
     func blockStart(for position: TextPosition) -> TextPosition? {
       layoutCollection.blockStart(for: position)
     }

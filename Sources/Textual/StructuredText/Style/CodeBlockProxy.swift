@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 extension StructuredText {
   /// A proxy for a rendered code block that custom code block styles can use.
@@ -17,22 +16,11 @@ extension StructuredText {
     @available(watchOS, unavailable)
     public func copyToPasteboard() {
       #if TEXTUAL_ENABLE_TEXT_SELECTION && canImport(AppKit) && !targetEnvironment(macCatalyst)
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-
-        let formatter = Formatter(AttributedString(content))
-        pasteboard.setString(formatter.plainText(), forType: .string)
-        pasteboard.setString(formatter.html(), forType: .html)
+        TransferableText(attributedString: NSAttributedString(AttributedString(content)))
+          .write(to: .general)
       #elseif TEXTUAL_ENABLE_TEXT_SELECTION && canImport(UIKit)
-        let formatter = Formatter(AttributedString(content))
-        UIPasteboard.general.setItems(
-          [
-            [
-              UTType.plainText.identifier: formatter.plainText(),
-              UTType.html.identifier: formatter.html(),
-            ]
-          ]
-        )
+        TransferableText(attributedString: NSAttributedString(AttributedString(content)))
+          .writeToGeneralPasteboard()
       #endif
     }
   }

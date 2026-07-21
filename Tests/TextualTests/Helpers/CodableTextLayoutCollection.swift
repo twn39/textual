@@ -9,17 +9,56 @@
     }
 
     let _layouts: [CodableTextLayout]
+    var needsReconciliation: Bool
+
+    init(_layouts: [CodableTextLayout], needsReconciliation: Bool = false) {
+      self._layouts = _layouts
+      self.needsReconciliation = needsReconciliation
+    }
 
     func isEqual(to other: any Textual.TextLayoutCollection) -> Bool {
       _layouts == (other as? CodableTextLayoutCollection)?._layouts
     }
 
     func needsPositionReconciliation(with other: any Textual.TextLayoutCollection) -> Bool {
-      false
+      needsReconciliation
     }
 
     func index(of layout: Text.Layout) -> Int? {
       nil
+    }
+
+    /// Bumps slice geometry so the collection is no longer equal while character ranges stay intact.
+    func withPerturbedGeometry() -> CodableTextLayoutCollection {
+      CodableTextLayoutCollection(
+        _layouts: _layouts.map { layout in
+          CodableTextLayout(
+            attributedString: layout.attributedString,
+            origin: layout.origin,
+            bounds: layout.bounds,
+            _lines: layout._lines.map { line in
+              CodableTextLine(
+                origin: line.origin,
+                typographicBounds: line.typographicBounds,
+                _runs: line._runs.map { run in
+                  CodableTextRun(
+                    isRightToLeft: run.isRightToLeft,
+                    typographicBounds: run.typographicBounds.offsetBy(dx: 0.5, dy: 0),
+                    url: run.url,
+                    _slices: run._slices.map { slice in
+                      CodableTextRunSlice(
+                        typographicBounds: slice.typographicBounds.offsetBy(dx: 0.5, dy: 0),
+                        characterRange: slice.characterRange
+                      )
+                    }
+                  )
+                }
+              )
+            }
+          )
+        },
+        needsReconciliation: needsReconciliation
+      )
     }
   }
 
@@ -33,6 +72,7 @@
     init(from decoder: any Decoder) throws {
       let container = try decoder.singleValueContainer()
       self._layouts = try container.decode([CodableTextLayout].self)
+      self.needsReconciliation = false
     }
 
     func encode(to encoder: any Encoder) throws {

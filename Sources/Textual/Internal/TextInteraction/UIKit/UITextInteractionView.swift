@@ -1,7 +1,6 @@
 #if TEXTUAL_ENABLE_TEXT_SELECTION && canImport(UIKit)
   import SwiftUI
   import os
-  import UniformTypeIdentifiers
 
   // MARK: - Overview
   //
@@ -72,16 +71,7 @@
       }
 
       let attributedText = model.attributedText(in: selectedRange)
-      let formatter = Formatter(attributedText)
-
-      UIPasteboard.general.setItems(
-        [
-          [
-            UTType.plainText.identifier: formatter.plainText(),
-            UTType.html.identifier: formatter.html(),
-          ]
-        ]
-      )
+      TransferableText(attributedString: attributedText).writeToGeneralPasteboard()
     }
 
     private func setUp() {

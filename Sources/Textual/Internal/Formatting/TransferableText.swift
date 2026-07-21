@@ -1,6 +1,14 @@
 import Foundation
 import UniformTypeIdentifiers
 
+#if canImport(UIKit)
+  import UIKit
+#endif
+
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+  import AppKit
+#endif
+
 final class TransferableText: NSObject {
   let attributedString: NSAttributedString
 
@@ -11,6 +19,37 @@ final class TransferableText: NSObject {
     self.formatter = Formatter(attributedString)
     super.init()
   }
+
+  var plainText: String {
+    formatter.plainText()
+  }
+
+  var html: String {
+    formatter.html()
+  }
+}
+
+extension TransferableText {
+  #if TEXTUAL_ENABLE_TEXT_SELECTION && canImport(AppKit) && !targetEnvironment(macCatalyst)
+    func write(to pasteboard: NSPasteboard) {
+      pasteboard.clearContents()
+      pasteboard.setString(plainText, forType: .string)
+      pasteboard.setString(html, forType: .html)
+    }
+  #endif
+
+  #if TEXTUAL_ENABLE_TEXT_SELECTION && canImport(UIKit)
+    func writeToGeneralPasteboard() {
+      UIPasteboard.general.setItems(
+        [
+          [
+            UTType.plainText.identifier: plainText,
+            UTType.html.identifier: html,
+          ]
+        ]
+      )
+    }
+  #endif
 }
 
 extension TransferableText: NSItemProviderWriting {
@@ -24,9 +63,9 @@ extension TransferableText: NSItemProviderWriting {
   ) -> Progress? {
     switch typeIdentifier {
     case UTType.plainText.identifier:
-      completionHandler(formatter.plainText().data(using: .utf8), nil)
+      completionHandler(plainText.data(using: .utf8), nil)
     case UTType.html.identifier:
-      completionHandler(formatter.html().data(using: .utf8), nil)
+      completionHandler(html.data(using: .utf8), nil)
     default:
       completionHandler(nil, nil)
     }

@@ -158,6 +158,24 @@ StructuredText(
 Scrollable regions like code blocks handle their own selection contexts. When you select text in a scrollable area,
 any document-level selection clears automatically, and vice versa.
 
+### Streaming updates
+
+When markup arrives incrementally—for example, tokens from an OpenAI-style chat completion stream—enable coalesced
+updates on `StructuredText`. Rapid changes are batched, and incomplete trailing Markdown (unclosed fences, emphasis,
+links, and inline code) is softened before parsing so mid-stream rendering stays usable:
+
+```swift
+@State private var accumulated = ""
+
+var body: some View {
+  StructuredText(markdown: accumulated)
+    .textual.streamingUpdates(.coalesced)
+}
+```
+
+The default is immediate parsing with no softening. Streaming updates are not true incremental parsing: each flush
+still re-parses the full string, so prefer coalescing on long responses. `InlineText` is unaffected in this release.
+
 ### Styling
 
 Textual provides a flexible styling system that lets you customize every aspect of structured text rendering. At the

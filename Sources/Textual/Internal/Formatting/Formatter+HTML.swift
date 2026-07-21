@@ -1,8 +1,11 @@
 import Foundation
 
 extension Formatter {
+  /// Renders the formatter’s block tree as HTML.
+  ///
+  /// Kept as a thin façade so callers (export, pasteboard) stay independent of renderer details.
   func html() -> String {
-    blockNodes.renderHTML()
+    blockNodes.renderHTML(depth: 0)
   }
 }
 
@@ -27,11 +30,12 @@ extension Formatter.InlineNode {
     case .lineBreak:
       return "<br />"
     case .attachment(let attachment):
+      let alt = attachment.description.htmlEscaped()
       guard let imageData = attachment.pngData() else {
-        return attachment.description.htmlEscaped()
+        return alt
       }
       let base64 = imageData.base64EncodedString()
-      return #"<img src="data:image/png;base64,\#(base64)" />"#
+      return #"<img alt="\#(alt)" src="data:image/png;base64,\#(base64)" />"#
     }
   }
 }
@@ -47,7 +51,12 @@ extension Array where Element == Formatter.InlineNode {
 // MARK: - Block rendering
 
 extension Formatter.BlockNode {
-  fileprivate func renderHTML() -> String {
+  fileprivate func renderHTML(depth: Int) -> String {
+    guard depth < Formatter.maxNestingDepth else {
+      // Flatten remaining structure so deeply nested content is not dropped.
+      return flattenHTML()
+    }
+
     switch self {
     case .paragraph(let children):
       return "<p>\(children.renderHTML())</p>"
@@ -57,9 +66,9 @@ extension Formatter.BlockNode {
     case .orderedList(let children):
       let start = children.map(\.ordinal).min() ?? 1
       let startAttribute = start > 1 ? #" start="\#(start)""# : ""
-      return "<ol\(startAttribute)>\n\(children.renderHTML())\n</ol>"
+      return "<ol\(startAttribute)>\n\(children.renderHTML(depth: depth + 1))\n</ol>"
     case .unorderedList(let children):
-      return "<ul>\n\(children.renderHTML())\n</ul>"
+      return "<ul>\n\(children.renderHTML(depth: depth + 1))\n</ul>"
     case .codeBlock(let languageHint, let code):
       let classAttribute =
         languageHint.flatMap {
@@ -69,7 +78,7 @@ extension Formatter.BlockNode {
         } ?? ""
       return "<pre><code\(classAttribute)>\(code.htmlCodeEscaped())</code></pre>"
     case .blockQuote(let children):
-      return "<blockquote>\n\(children.renderHTML())\n</blockquote>"
+      return "<blockquote>\n\(children.renderHTML(depth: depth + 1))\n</blockquote>"
     case .table(let columns, let children):
       guard let headerHTML = children.first?.renderHeaderHTML(columns: columns) else {
         return "<table></table>"
@@ -85,12 +94,42 @@ extension Formatter.BlockNode {
       return "<hr />"
     }
   }
+
+  /// Renders without introducing additional nested block wrappers (used at max depth).
+  fileprivate func flattenHTML() -> String {
+    switch self {
+    case .paragraph(let children), .header(_, let children):
+      return children.renderHTML()
+    case .orderedList(let children), .unorderedList(let children):
+      return children.map { $0.flattenHTML() }.joined(separator: "\n")
+    case .codeBlock(_, let code):
+      return code.htmlCodeEscaped()
+    case .blockQuote(let children):
+      return children.map { $0.flattenHTML() }.joined(separator: "\n")
+    case .table(_, let children):
+      return children.map { $0.flattenHTML() }.joined(separator: "\n")
+    case .thematicBreak:
+      return "***"
+    }
+  }
+}
+
+extension Formatter.ListItem {
+  fileprivate func flattenHTML() -> String {
+    blocks.map { $0.flattenHTML() }.joined(separator: "\n")
+  }
+}
+
+extension Formatter.TableRow {
+  fileprivate func flattenHTML() -> String {
+    cells.map { $0.renderHTML() }.joined(separator: "\t")
+  }
 }
 
 extension Array where Element == Formatter.BlockNode {
-  fileprivate func renderHTML() -> String {
+  fileprivate func renderHTML(depth: Int) -> String {
     self.map {
-      $0.renderHTML()
+      $0.renderHTML(depth: depth)
     }.joined(separator: "\n")
   }
 }
@@ -129,7 +168,7 @@ extension Array where Element == Formatter.TableRow {
 // MARK: - List rendering
 
 extension Formatter.ListItem {
-  fileprivate func renderHTML() -> String {
+  fileprivate func renderHTML(depth: Int) -> String {
     // NB: Tight vs. loose list detection. When Markdown has blank lines between list items,
     //     the parser creates multiple paragraph blocks. Single paragraph = tight (no <p> tags),
     //     multiple paragraphs = loose (wrap content in <p> tags).
@@ -157,19 +196,19 @@ extension Formatter.ListItem {
       let otherBlocks = blocks.enumerated().filter { $0.offset != firstParagraphIndex }.map {
         $0.element
       }
-      let otherHTML = otherBlocks.renderHTML()
+      let otherHTML = otherBlocks.renderHTML(depth: depth + 1)
       return "<li>\(children.renderHTML())\(otherHTML)</li>"
     }
 
     // Loose list - multiple paragraphs mean blank lines existed
-    return "<li>\(blocks.renderHTML())</li>"
+    return "<li>\(blocks.renderHTML(depth: depth + 1))</li>"
   }
 }
 
 extension Array where Element == Formatter.ListItem {
-  fileprivate func renderHTML() -> String {
+  fileprivate func renderHTML(depth: Int) -> String {
     self.map {
-      $0.renderHTML()
+      $0.renderHTML(depth: depth)
     }.joined(separator: "\n")
   }
 }

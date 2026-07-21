@@ -120,15 +120,59 @@
       interpretKeyEvents([event])
     }
 
+    // MARK: - Caret movement (no Shift)
+
+    override func moveRight(_ sender: Any?) {
+      moveCaret(in: .right)
+    }
+
+    override func moveLeft(_ sender: Any?) {
+      moveCaret(in: .left)
+    }
+
+    override func moveUp(_ sender: Any?) {
+      moveCaret(in: .up)
+    }
+
+    override func moveDown(_ sender: Any?) {
+      moveCaret(in: .down)
+    }
+
+    override func moveWordRight(_ sender: Any?) {
+      moveCaret(collapsingTo: \.end) { position in
+        model.nextWord(from: position)
+      }
+    }
+
+    override func moveWordLeft(_ sender: Any?) {
+      moveCaret(collapsingTo: \.start) { position in
+        model.previousWord(from: position)
+      }
+    }
+
+    override func moveToEndOfParagraph(_ sender: Any?) {
+      moveCaret(collapsingTo: \.end) { position in
+        model.blockEnd(for: position)
+      }
+    }
+
+    override func moveToBeginningOfParagraph(_ sender: Any?) {
+      moveCaret(collapsingTo: \.start) { position in
+        model.blockStart(for: position)
+      }
+    }
+
+    // MARK: - Selection extension (Shift)
+
     override func moveRightAndModifySelection(_ sender: Any?) {
       modifySelection { position, _ in
-        model.position(from: position, offset: 1)
+        model.position(from: position, in: .right, offset: 1)
       }
     }
 
     override func moveLeftAndModifySelection(_ sender: Any?) {
       modifySelection { position, _ in
-        model.position(from: position, offset: -1)
+        model.position(from: position, in: .left, offset: 1)
       }
     }
 
@@ -222,6 +266,25 @@
       return contextMenu
     }
 
+    private func moveCaret(in direction: TextLayoutNavigationDirection) {
+      selectionAnchor = nil
+      guard model.moveSelection(in: direction) else {
+        return
+      }
+      scrollCaretVisible()
+    }
+
+    private func moveCaret(
+      collapsingTo collapsingPosition: (TextRange) -> TextPosition,
+      _ transform: (TextPosition) -> TextPosition?
+    ) {
+      selectionAnchor = nil
+      guard model.moveSelection(collapsingTo: collapsingPosition, orTransform: transform) else {
+        return
+      }
+      scrollCaretVisible()
+    }
+
     private func modifySelection(
       _ transform: (_ position: TextPosition, _ anchor: TextPosition) -> TextPosition?
     ) {
@@ -246,10 +309,14 @@
         return
       }
       model.selectedRange = TextRange(from: selectionAnchor, to: newPosition)
+      scrollToVisible(model.caretRect(for: newPosition))
+    }
 
-      // scroll to make the new position visible
-      let caretRect = model.caretRect(for: newPosition)
-      scrollToVisible(caretRect)
+    private func scrollCaretVisible() {
+      guard let selectedRange = model.selectedRange else {
+        return
+      }
+      scrollToVisible(model.caretRect(for: selectedRange.end))
     }
 
     private func resetSelection() {
@@ -280,13 +347,7 @@
       }
 
       let attributedText = model.attributedText(in: selectedRange)
-
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-
-      let formatter = Formatter(attributedText)
-      pasteboard.setString(formatter.plainText(), forType: .string)
-      pasteboard.setString(formatter.html(), forType: .html)
+      TransferableText(attributedString: attributedText).write(to: .general)
     }
   }
 
@@ -300,7 +361,15 @@
           return false
         }
         return !selectedRange.isCollapsed
-      case #selector(moveRightAndModifySelection(_:)),
+      case #selector(moveRight(_:)),
+        #selector(moveLeft(_:)),
+        #selector(moveUp(_:)),
+        #selector(moveDown(_:)),
+        #selector(moveWordRight(_:)),
+        #selector(moveWordLeft(_:)),
+        #selector(moveToEndOfParagraph(_:)),
+        #selector(moveToBeginningOfParagraph(_:)),
+        #selector(moveRightAndModifySelection(_:)),
         #selector(moveLeftAndModifySelection(_:)),
         #selector(moveUpAndModifySelection(_:)),
         #selector(moveDownAndModifySelection(_:)),

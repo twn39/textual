@@ -673,4 +673,21 @@ struct HTMLFormatterTests {
     // then
     #expect(result == "<p></p>")
   }
+
+  @Test func deeplyNestedBlockQuotesDoNotDropContent() throws {
+    // given — nest well past the formatter’s nesting cap
+    let nesting = Formatter.maxNestingDepth + 8
+    let prefix = String(repeating: "> ", count: nesting)
+    let formatter = try Formatter(
+      NSAttributedString(markdown: "\(prefix)deep content")
+    )
+
+    // when
+    let html = formatter.html()
+    let plain = formatter.plainText()
+
+    // then
+    #expect(html.contains("deep content"))
+    #expect(plain.contains("deep content"))
+  }
 }

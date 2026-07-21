@@ -13,6 +13,9 @@ import Foundation
 
 extension AttributedStringMarkdownParser {
   struct PatternProcessor {
+    /// Soft cap on expanded UTF-8 size to bound pathological replacement growth.
+    static let maxExpandedUTF8Count = 5_000_000
+
     private let syntaxExtensions: [SyntaxExtension]
     private let tokenizer: PatternTokenizer
 
@@ -29,6 +32,11 @@ extension AttributedStringMarkdownParser {
       var output = AttributedString()
 
       for run in attributedString.runs {
+        if utf8Count(of: output) >= Self.maxExpandedUTF8Count {
+          output.append(attributedString[run.range.lowerBound..<attributedString.endIndex])
+          break
+        }
+
         if run.isPreformatted {
           output.append(attributedString[run.range])
         } else {
@@ -40,6 +48,11 @@ extension AttributedStringMarkdownParser {
             output.append(attributedString[run.range])
           } else {
             for token in tokens {
+              if utf8Count(of: output) >= Self.maxExpandedUTF8Count {
+                output.append(AttributedString(token.content, attributes: run.attributes))
+                continue
+              }
+
               if let syntaxExtension = syntaxExtensions.firstMatching(token.type),
                 let replacement = syntaxExtension.replace(token, run.attributes)
               {
@@ -54,6 +67,10 @@ extension AttributedStringMarkdownParser {
       }
 
       return output
+    }
+
+    private func utf8Count(of attributedString: AttributedString) -> Int {
+      String(attributedString.characters).utf8.count
     }
   }
 }

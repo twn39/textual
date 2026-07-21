@@ -6,15 +6,17 @@
 
   extension TextSelectionModel {
     convenience init(fixtureName name: String) throws {
-      let url = Bundle.module.url(
-        forResource: "Fixtures/TextSelectionModel/\(name)",
-        withExtension: "json"
-      )
-      let data = try url.map { try Data(contentsOf: $0) } ?? Data()
-      let layoutCollection = try JSONDecoder().decode(CodableTextLayoutCollection.self, from: data)
-
-      self.init(layoutCollection: layoutCollection)
+      self.init(layoutCollection: try loadLayoutCollection(named: name))
     }
+  }
+
+  func loadLayoutCollection(named name: String) throws -> CodableTextLayoutCollection {
+    let url = Bundle.module.url(
+      forResource: "Fixtures/TextSelectionModel/\(name)",
+      withExtension: "json"
+    )
+    let data = try url.map { try Data(contentsOf: $0) } ?? Data()
+    return try JSONDecoder().decode(CodableTextLayoutCollection.self, from: data)
   }
 
   #if os(iOS) && !targetEnvironment(macCatalyst)

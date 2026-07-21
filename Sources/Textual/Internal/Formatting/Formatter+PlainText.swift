@@ -1,6 +1,7 @@
 import Foundation
 
 extension Formatter {
+  /// Renders the formatter’s block tree as plain text.
   func plainText() -> String {
     blockNodes.renderPlainText()
   }
@@ -43,22 +44,33 @@ extension Array where Element == Formatter.InlineNode {
 
 extension Formatter.BlockNode {
   fileprivate func renderPlainText(indentationLevel: Int, tightSpacing: Bool) -> String {
+    let level = min(indentationLevel, Formatter.maxNestingDepth)
+
     switch self {
     case .paragraph(let children):
-      return children.renderPlainText().indented(indentationLevel)
+      return children.renderPlainText().indented(level)
     case .header(_, let children):
-      return children.renderPlainText().indented(indentationLevel)
+      return children.renderPlainText().indented(level)
     case .orderedList(let children):
-      return children.renderOrderedPlainText(indentationLevel: indentationLevel + 1)
+      guard indentationLevel < Formatter.maxNestingDepth else {
+        return children.renderOrderedPlainText(indentationLevel: level)
+      }
+      return children.renderOrderedPlainText(indentationLevel: level + 1)
     case .unorderedList(let children):
-      return children.renderUnorderedPlainText(indentationLevel: indentationLevel + 1)
+      guard indentationLevel < Formatter.maxNestingDepth else {
+        return children.renderUnorderedPlainText(indentationLevel: level)
+      }
+      return children.renderUnorderedPlainText(indentationLevel: level + 1)
     case .codeBlock(_, let code):
-      return code.indented(indentationLevel)
+      return code.indented(level)
     case .blockQuote(let children):
+      guard indentationLevel < Formatter.maxNestingDepth else {
+        return children.renderPlainText(indentationLevel: level, tightSpacing: tightSpacing)
+      }
       return children.renderPlainText(
-        indentationLevel: indentationLevel + 1, tightSpacing: tightSpacing)
+        indentationLevel: level + 1, tightSpacing: tightSpacing)
     case .table(_, let children):
-      return children.renderPlainText(indentationLevel: indentationLevel)
+      return children.renderPlainText(indentationLevel: level)
     case .thematicBreak:
       return "***"
     }

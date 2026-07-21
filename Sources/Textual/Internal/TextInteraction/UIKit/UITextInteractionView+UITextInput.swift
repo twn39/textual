@@ -83,8 +83,17 @@
       in direction: UITextLayoutDirection,
       offset: Int
     ) -> UITextPosition? {
-      logger.error("position(from:in:offset:) is not implemented")
-      return nil
+      guard
+        let positionBox = position as? TextPositionBox,
+        let navigationDirection = TextLayoutNavigationDirection(direction)
+      else {
+        return nil
+      }
+      return model.position(
+        from: positionBox.wrappedValue,
+        in: navigationDirection,
+        offset: offset
+      ).map(TextPositionBox.init)
     }
 
     func compare(_ position: UITextPosition, to other: UITextPosition) -> ComparisonResult {
@@ -113,16 +122,34 @@
       within range: UITextRange,
       farthestIn direction: UITextLayoutDirection
     ) -> UITextPosition? {
-      logger.error("position(within:farthestIn:) is not implemented")
-      return nil
+      guard
+        let rangeBox = range as? TextRangeBox,
+        let navigationDirection = TextLayoutNavigationDirection(direction)
+      else {
+        return nil
+      }
+      return TextPositionBox(
+        model.farthestPosition(
+          within: rangeBox.wrappedValue,
+          in: navigationDirection
+        )
+      )
     }
 
     func characterRange(
       byExtending position: UITextPosition,
       in direction: UITextLayoutDirection
     ) -> UITextRange? {
-      logger.error("characterRange(byExtending:in:) is not implemented")
-      return nil
+      guard
+        let positionBox = position as? TextPositionBox,
+        let navigationDirection = TextLayoutNavigationDirection(direction)
+      else {
+        return nil
+      }
+      return model.characterRange(
+        byExtending: positionBox.wrappedValue,
+        in: navigationDirection
+      ).map(TextRangeBox.init)
     }
 
     func baseWritingDirection(
@@ -180,6 +207,23 @@
     func attributedText(in range: UITextRange) -> NSAttributedString {
       guard let rangeBox = range as? TextRangeBox else { return .init() }
       return model.attributedText(in: rangeBox.wrappedValue)
+    }
+  }
+
+  extension TextLayoutNavigationDirection {
+    init?(_ direction: UITextLayoutDirection) {
+      switch direction {
+      case .left:
+        self = .left
+      case .right:
+        self = .right
+      case .up:
+        self = .up
+      case .down:
+        self = .down
+      @unknown default:
+        return nil
+      }
     }
   }
 #endif

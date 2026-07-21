@@ -877,6 +877,209 @@
       #expect(result == model.endPosition)
     }
 
+    @Test
+    func positionInDirectionLeftRight() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let start = model.startPosition
+
+      // when
+      let right = model.position(from: start, in: .right, offset: 1)
+      let left = right.flatMap { model.position(from: $0, in: .left, offset: 1) }
+      let zero = model.position(from: start, in: .right, offset: 0)
+      let negative = model.position(from: start, in: .left, offset: -1)
+
+      // then
+      #expect(right == model.position(from: start, offset: 1))
+      #expect(left == start)
+      #expect(zero == start)
+      #expect(negative == nil)
+    }
+
+    @Test
+    func positionInDirectionUpDown() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let position = TextPosition(
+        indexPath: .init(runSlice: 0, run: 1, line: 1, layout: 0),
+        affinity: .downstream
+      )
+
+      // when
+      let up = model.position(from: position, in: .up, offset: 1)
+      let down = up.flatMap { model.position(from: $0, in: .down, offset: 1) }
+
+      // then
+      #expect(up?.indexPath.line == 0)
+      #expect(up?.indexPath.layout == 0)
+      #expect(down?.indexPath.line == 1)
+      #expect(down?.indexPath.layout == 0)
+    }
+
+    @Test
+    func farthestPositionWithinRange() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let range = TextRange(
+        start: model.startPosition,
+        end: model.endPosition
+      )
+
+      // when
+      let left = model.farthestPosition(within: range, in: .left)
+      let right = model.farthestPosition(within: range, in: .right)
+      let up = model.farthestPosition(within: range, in: .up)
+      let down = model.farthestPosition(within: range, in: .down)
+
+      // then
+      #expect(left == range.start || left == range.end)
+      #expect(right == range.start || right == range.end)
+      #expect(up == range.start || up == range.end)
+      #expect(down == range.start || down == range.end)
+      #expect(Set([left, right]).count == 2 || range.isCollapsed)
+      #expect(Set([up, down]).count == 2 || range.isCollapsed)
+    }
+
+    @Test
+    func characterRangeByExtending() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let start = model.startPosition
+
+      // when
+      let right = model.characterRange(byExtending: start, in: .right)
+      let leftFromStart = model.characterRange(byExtending: start, in: .left)
+
+      // then
+      #expect(right?.start == start)
+      #expect(right?.end == model.position(from: start, offset: 1))
+      #expect(leftFromStart == nil)
+    }
+
+    @Test
+    func moveSelectionMovesCollapsedCaret() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let start = model.startPosition
+      model.selectedRange = TextRange(start: start, end: start)
+
+      // when
+      let moved = model.moveSelection(in: .right)
+
+      // then
+      #expect(moved)
+      #expect(model.selectedRange?.isCollapsed == true)
+      #expect(model.selectedRange?.start == model.position(from: start, offset: 1))
+    }
+
+    @Test
+    func moveSelectionCollapsesNonEmptyRange() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let range = TextRange(start: model.startPosition, end: model.endPosition)
+      model.selectedRange = range
+      let expected = model.farthestPosition(within: range, in: .left)
+
+      // when
+      let moved = model.moveSelection(in: .left)
+
+      // then
+      #expect(moved)
+      #expect(model.selectedRange?.isCollapsed == true)
+      #expect(model.selectedRange?.start == expected)
+    }
+
+    @Test
+    func moveSelectionByWordAndBlock() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let start = model.startPosition
+      model.selectedRange = TextRange(start: start, end: start)
+
+      // when
+      #if os(macOS)
+        let movedWord = model.moveSelection(collapsingTo: \.end) { position in
+          model.nextWord(from: position)
+        }
+        let afterWord = model.selectedRange?.start
+        let movedBlock = model.moveSelection(collapsingTo: \.end) { position in
+          model.blockEnd(for: position)
+        }
+      #else
+        let movedWord = model.moveSelection(collapsingTo: \.end) { position in
+          model.blockEnd(for: position)
+        }
+        let afterWord = model.selectedRange?.start
+        let movedBlock = model.moveSelection(collapsingTo: \.start) { position in
+          model.blockStart(for: position)
+        }
+      #endif
+
+      // then
+      #expect(movedWord)
+      #expect(afterWord != start)
+      #expect(movedBlock)
+      #expect(model.selectedRange?.isCollapsed == true)
+    }
+
+    @Test
+    func reconcileRangePreservesCharacterOffsets() throws {
+      // given
+      let original = try loadLayoutCollection(named: "two-paragraphs-bidi")
+      let rebuilt = try loadLayoutCollection(named: "two-paragraphs-bidi")
+      let range = TextRange(
+        start: TextPosition(
+          indexPath: .init(runSlice: 1, run: 2, line: 0, layout: 0),
+          affinity: .downstream
+        ),
+        end: TextPosition(
+          indexPath: .init(runSlice: 5, run: 1, line: 0, layout: 1),
+          affinity: .upstream
+        )
+      )
+      let startOffset = original.characterIndex(at: range.start)
+      let endOffset = original.characterIndex(at: range.end)
+
+      // when
+      let reconciled = rebuilt.reconcileRange(range, from: original)
+
+      // then
+      #expect(reconciled != nil)
+      #expect(rebuilt.characterIndex(at: reconciled!.start) == startOffset)
+      #expect(rebuilt.characterIndex(at: reconciled!.end) == endOffset)
+    }
+
+    @Test
+    func setLayoutCollectionReconcilesSelection() throws {
+      // given
+      let model = try TextSelectionModel(fixtureName: "two-paragraphs-bidi")
+      let range = TextRange(
+        start: TextPosition(
+          indexPath: .init(runSlice: 1, run: 2, line: 0, layout: 0),
+          affinity: .downstream
+        ),
+        end: TextPosition(
+          indexPath: .init(runSlice: 5, run: 1, line: 0, layout: 1),
+          affinity: .upstream
+        )
+      )
+      model.selectedRange = range
+      let startOffset = model.offset(from: model.startPosition, to: range.start)
+      let endOffset = model.offset(from: model.startPosition, to: range.end)
+
+      var rebuilt = try loadLayoutCollection(named: "two-paragraphs-bidi")
+      rebuilt = rebuilt.withPerturbedGeometry()
+      rebuilt.needsReconciliation = true
+
+      // when
+      model.setLayoutCollection(rebuilt)
+
+      // then
+      let selected = try #require(model.selectedRange)
+      #expect(model.offset(from: model.startPosition, to: selected.start) == startOffset)
+      #expect(model.offset(from: model.startPosition, to: selected.end) == endOffset)
+    }
+
     #if os(iOS)
       @Test(.disabled())
       @MainActor

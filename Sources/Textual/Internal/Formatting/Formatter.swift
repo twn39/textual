@@ -17,6 +17,9 @@ import Foundation
 // The result is a semantic document structure suitable for rendering to various formats.
 
 final class Formatter {
+  /// Caps recursive block/list nesting when building export trees from pathological markup.
+  static let maxNestingDepth = 64
+
   lazy var blockNodes: [BlockNode] = makeBlockNodes()
 
   private let attributedString: AttributedString
@@ -208,7 +211,47 @@ extension AttributedString {
 // MARK: - Block tree building
 
 extension Formatter.Block {
-  fileprivate init(segmentGrouping: Formatter.SegmentGrouping, attributedString: AttributedString) {
+  fileprivate init(
+    segmentGrouping: Formatter.SegmentGrouping,
+    attributedString: AttributedString,
+    depth: Int = 0
+  ) {
+    if depth >= Formatter.maxNestingDepth,
+      let first = segmentGrouping.segments.first,
+      let last = segmentGrouping.segments.last
+    {
+      let content = attributedString[first.range.lowerBound..<last.range.upperBound]
+      switch segmentGrouping.component.kind {
+      case .paragraph, .header, .codeBlock, .thematicBreak:
+        // Leaf-capable intents can terminate directly.
+        self.init(
+          intentType: segmentGrouping.component,
+          kind: .leaf(.init(attributedString: content))
+        )
+      default:
+        // Quotes/lists/tables need a container; wrap remaining text as a paragraph so export
+        // still sees the content instead of dropping a leaf-shaped container intent.
+        let paragraphType = PresentationIntent(
+          .paragraph,
+          identity: segmentGrouping.component.identity
+        ).components[0]
+        self.init(
+          intentType: segmentGrouping.component,
+          kind: .container(
+            .init(
+              children: [
+                .init(
+                  intentType: paragraphType,
+                  kind: .leaf(.init(attributedString: content))
+                )
+              ]
+            )
+          )
+        )
+      }
+      return
+    }
+
     if let segment = segmentGrouping.segments.first, segment.components.isEmpty {
       self.init(
         intentType: segmentGrouping.component,
@@ -222,7 +265,11 @@ extension Formatter.Block {
         kind: .container(
           .init(
             children: segmentGrouping.segments.groupedByLastComponent().map {
-              .init(segmentGrouping: $0, attributedString: attributedString)
+              .init(
+                segmentGrouping: $0,
+                attributedString: attributedString,
+                depth: depth + 1
+              )
             }
           )
         )
@@ -265,10 +312,14 @@ extension Formatter.Block {
         code: String(leaf.attributedString.characters[...])
       )
     case .blockQuote:
-      guard let container else {
-        return nil
+      if let container {
+        return .blockQuote(children: container.children.compactMap(\.blockNode))
       }
-      return .blockQuote(children: container.children.compactMap(\.blockNode))
+      // Defensive: a leaf-shaped quote (e.g. nesting cap) still exports its text.
+      if let leaf {
+        return .blockQuote(children: [.paragraph(children: leaf.inlineNodes)])
+      }
+      return nil
     case .table(let columns):
       guard let container else {
         return nil

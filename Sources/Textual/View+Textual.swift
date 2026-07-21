@@ -10,6 +10,7 @@ extension View {
   /// StructuredText(markdown: "Hello, **world**!")
   ///   .textual.inlineStyle(.custom)
   ///   .textual.textSelection(.enabled)
+  ///   .textual.streamingUpdates(.coalesced)
   /// ```
   @inlinable public var textual: TextualNamespace<Self> { .init(self) }
 }
@@ -177,6 +178,23 @@ extension TextualNamespace where Base: View {
   @inlinable
   public func overflowMode(_ overflowMode: OverflowMode) -> some View {
     base.environment(\.overflowMode, overflowMode)
+  }
+
+  /// Controls how ``StructuredText`` applies rapidly changing markup.
+  ///
+  /// Use ``StreamingUpdates/coalesced`` when feeding incrementally accumulated Markdown (for
+  /// example, an AI token stream). Updates are batched and incomplete trailing markup is softened
+  /// before parsing. The default is ``StreamingUpdates/disabled``.
+  ///
+  /// ```swift
+  /// StructuredText(markdown: accumulated)
+  ///   .textual.streamingUpdates(.coalesced)
+  /// ```
+  ///
+  /// - Note: This modifier currently affects ``StructuredText`` only.
+  @inlinable
+  public func streamingUpdates(_ streamingUpdates: StreamingUpdates) -> some View {
+    base.environment(\.streamingUpdates, streamingUpdates)
   }
 
   /// Sets the inline style used by ``InlineText`` and ``StructuredText``.
