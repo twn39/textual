@@ -3,6 +3,15 @@
 
   final class LiveTextLayoutCollection: TextLayoutCollection {
     private(set) lazy var layouts: [any TextLayout] = makeLayouts()
+    private(set) lazy var cumulativeLayoutLengths: [Int] = {
+      var sum = 0
+      var result = [0]
+      for layout in layouts {
+        sum += layout.attributedString.length
+        result.append(sum)
+      }
+      return result
+    }()
 
     private let base: Text.LayoutKey.Value
     private let geometry: GeometryProxy

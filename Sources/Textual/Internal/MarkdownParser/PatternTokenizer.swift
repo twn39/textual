@@ -24,6 +24,18 @@ struct PatternTokenizer {
       return [.init(type: .text, content: input)]
     }
 
+    var hasAnyMatch = false
+    for pattern in patterns {
+      if try pattern.regex.firstMatch(in: input) != nil {
+        hasAnyMatch = true
+        break
+      }
+    }
+
+    guard hasAnyMatch else {
+      return [.init(type: .text, content: input)]
+    }
+
     var tokens: [Token] = []
     var currentIndex = input.startIndex
 

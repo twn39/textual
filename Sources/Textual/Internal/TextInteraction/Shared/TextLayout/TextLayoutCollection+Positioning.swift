@@ -36,21 +36,22 @@
         return nil
       }
 
-      // Map target to layout and local character index
-
-      var localTarget = target
+      // Map target to layout and local character index using binary search
+      var low = 0
+      var high = layouts.count - 1
       var layout = 0
 
-      while layout < layouts.count {
-        let length = layouts[layout].attributedString.length
-
-        guard localTarget > length else {
-          break
+      while low <= high {
+        let mid = (low + high) / 2
+        if cumulativeLayoutLengths[mid] <= target {
+          layout = mid
+          low = mid + 1
+        } else {
+          high = mid - 1
         }
-
-        localTarget -= length
-        layout += 1
       }
+
+      let localTarget = target - cumulativeLayoutLengths[layout]
 
       guard layout < layouts.count else {
         return endPosition
@@ -60,9 +61,11 @@
     }
 
     func characterIndex(at position: TextPosition) -> Int {
-      let base = layouts.prefix(position.indexPath.layout)
-        .map(\.attributedString.length)
-        .reduce(0, +)
+      let layoutIndex = position.indexPath.layout
+      guard cumulativeLayoutLengths.indices.contains(layoutIndex) else {
+        return localCharacterIndex(at: position)
+      }
+      let base = cumulativeLayoutLengths[layoutIndex]
       return base + localCharacterIndex(at: position)
     }
 

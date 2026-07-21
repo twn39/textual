@@ -3,10 +3,23 @@
 
   protocol TextLayoutCollection {
     var layouts: [any TextLayout] { get }
+    var cumulativeLayoutLengths: [Int] { get }
 
     func isEqual(to other: any TextLayoutCollection) -> Bool
     func needsPositionReconciliation(with other: any TextLayoutCollection) -> Bool
     func index(of layout: Text.Layout) -> Int?
+  }
+
+  extension TextLayoutCollection {
+    var cumulativeLayoutLengths: [Int] {
+      var sum = 0
+      var result = [0]
+      for layout in layouts {
+        sum += layout.attributedString.length
+        result.append(sum)
+      }
+      return result
+    }
   }
 
   struct AnyTextLayoutCollection: TextLayoutCollection, Equatable {
@@ -18,6 +31,10 @@
 
     var layouts: [any TextLayout] {
       base.layouts
+    }
+
+    var cumulativeLayoutLengths: [Int] {
+      base.cumulativeLayoutLengths
     }
 
     func isEqual(to other: any TextLayoutCollection) -> Bool {

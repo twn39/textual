@@ -1,0 +1,8 @@
+{
+  "include": ["Sources", "Tests"],
+  "exclude": [],
+  "output": ".codegraph",
+  "languages": ["swift"],
+  "workers": 4,
+  "cache": true
+}

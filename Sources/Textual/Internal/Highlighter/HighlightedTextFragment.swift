@@ -37,11 +37,11 @@ struct HighlightedTextFragment: View {
           languageHint: languageHint
         )
       }
-      .onChange(of: Tuple(model.tokens, textEnvironment)) { _, newValue in
+      .onChange(of: Tuple(model.tokens, textEnvironment, theme)) { _, newValue in
         model.highlight(
           tokens: newValue.values.0,
           presentationIntent: content.presentationIntent,
-          using: theme,
+          using: newValue.values.2,
           environment: newValue.values.1
         )
       }
